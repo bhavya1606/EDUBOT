@@ -39,7 +39,6 @@
             box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
             padding: 25px;
         }
-
         /* Chat Box Styling */
         .chat-box {
             background: #fff;
@@ -101,7 +100,6 @@
         .input-form button:hover {
             background: #4f46e5;
         }
-
         /* Skill Gap Analysis Form */
         .skill-gap-form {
             margin-top: 25px;
@@ -140,7 +138,6 @@
         .skill-gap-form button:hover {
             background: #4f46e5;
         }
-
         /* Skill Gap Results Section */
         .skill-gap-results {
             margin-top: 25px;
@@ -169,7 +166,6 @@
             border-radius: 8px;
             color: #374151;
         }
-
         /* Chat History Section */
         .chat-history-section {
             margin-top: 25px;
@@ -209,7 +205,6 @@
         .history-item small {
             color: #6b7280;
         }
-
         /* Link Styling */
         .message.bot-message a {
             color: #6366f1;
@@ -268,41 +263,42 @@
         const chatHistory = document.getElementById('chat-history');
         let voiceEnabled = true;
 
-function toggleVoice() {
-    voiceEnabled = !voiceEnabled;
-    document.getElementById('voice-toggle').innerText = voiceEnabled ? "🔈 Voice: ON" : "🔇 Voice: OFF";
-}
-function stopSpeaking() {
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-      }
-    }
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            document.getElementById('voice-toggle').innerText = voiceEnabled ? "🔈 Voice: ON" : "🔇 Voice: OFF";
+        }
 
-function startVoiceInput() {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
+        function stopSpeaking() {
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
+        }
 
-    recognition.start();
+        function startVoiceInput() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.start();
+            recognition.onresult = function(event) {
+                const speechText = event.results[0][0].transcript;
+                document.getElementById('user-input').value = speechText;
+                sendMessage();
+            };
+            recognition.onerror = function(event) {
+                alert("Voice input error: " + event.error);
+            };
+        }
 
-    recognition.onresult = function(event) {
-        const speechText = event.results[0][0].transcript;
-        document.getElementById('user-input').value = speechText;
-        sendMessage();
-    };
-
-    recognition.onerror = function(event) {
-        alert("Voice input error: " + event.error);
-    };
-}
         function sendMessage() {
             const userInput = document.getElementById('user-input').value;
             if (!userInput.trim()) return;
+
             // Display user message
             const userMessageDiv = document.createElement('div');
             userMessageDiv.className = 'message user-message';
             userMessageDiv.textContent = `You: ${userInput}`;
             chatHistory.appendChild(userMessageDiv);
+
             // Send message to server and get bot response
             fetch('/get', {
                 method: 'POST',
@@ -312,8 +308,8 @@ function startVoiceInput() {
             .then(response => response.text())
             .then(botResponse => {
                 if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.cancel(); // stop any previous speech
-        }
+                    window.speechSynthesis.cancel(); // stop any previous speech
+                }
                 const botMessageDiv = document.createElement('div');
                 botMessageDiv.className = 'message bot-message';
                 // Render bot response as HTML
@@ -327,9 +323,11 @@ function startVoiceInput() {
                     synth.speak(utter);
                 }
             });
+
             // Clear input field
             document.getElementById('user-input').value = '';
         }
+
         function analyzeSkills() {
             const form = document.getElementById('skill-gap-form');
             const formData = new FormData(form);
@@ -342,18 +340,36 @@ function startVoiceInput() {
                 // Show results section
                 const resultsSection = document.getElementById('skill-gap-results');
                 resultsSection.style.display = 'block';
+
                 // Populate results
                 document.getElementById('resume-skills').textContent = data.resume_skills.join(', ');
                 document.getElementById('missing-skills').textContent = data.missing_skills.join(', ');
+
                 const courseSuggestionsList = document.getElementById('course-suggestions');
                 courseSuggestionsList.innerHTML = ''; // Clear previous suggestions
+
                 for (const [skill, courses] of Object.entries(data.course_suggestions)) {
                     const listItem = document.createElement('li');
-                    listItem.innerHTML = `${skill}: ${courses.join(', ')}`;
+                    const skillHeader = document.createElement('strong');
+                    skillHeader.textContent = `${skill}: `;
+                    listItem.appendChild(skillHeader);
+
+                    const courseLinks = document.createElement('span');
+                    courses.forEach((courseLink, index) => {
+                        const link = document.createElement('a');
+                        link.href = courseLink;
+                        link.target = '_blank';
+                        link.textContent = `Course ${index + 1}`;
+                        courseLinks.appendChild(link);
+                        courseLinks.appendChild(document.createTextNode(' ')); // Add space between links
+                    });
+
+                    listItem.appendChild(courseLinks);
                     courseSuggestionsList.appendChild(listItem);
                 }
             });
         }
+
         function viewChatHistory() {
             fetch('/history')
             .then(response => response.json())
@@ -372,6 +388,7 @@ function startVoiceInput() {
                 });
             });
         }
+
         function clearChatHistory() {
             fetch('/clear-history', {
                 method: 'POST'

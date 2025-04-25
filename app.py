@@ -17,7 +17,6 @@ import time
 from bs4 import BeautifulSoup
 import pdfplumber
 
-
 # Initialize Flask app
 app = Flask(__name__)
 load_dotenv()
@@ -185,6 +184,58 @@ def chat():
     store_chat_history(msg, bot_response)
     return bot_response
 
+@app.route("/analyze-skills", methods=["POST"])
+def analyze_skills():
+    resume_file = request.files.get("resume")
+    job_description = request.form.get("job_description", "")
+
+    if not resume_file or not job_description:
+        return jsonify({"error": "Resume or job description missing"}), 400
+
+    resume_text = ""
+    if resume_file.filename.endswith(".pdf"):
+        with pdfplumber.open(resume_file) as pdf:
+            for page in pdf.pages:
+                resume_text += page.extract_text() or ""
+
+    resume_words = set(resume_text.lower().split())
+    jd_skills = set(job_description.lower().split(","))
+
+    resume_skills = [skill.strip() for skill in jd_skills if skill.strip() in resume_words]
+    missing_skills = [skill.strip() for skill in jd_skills if skill.strip() not in resume_words]
+
+    course_suggestions = {}
+    for skill in missing_skills:
+        coursera_links = search_coursera(skill)
+        course_suggestions[skill] = coursera_links
+
+    return jsonify({
+        "resume_skills": resume_skills,
+        "missing_skills": missing_skills,
+        "course_suggestions": course_suggestions
+    })
+
+@app.route("/history")
+def history():
+    conn = sqlite3.connect('chat_history.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_message, bot_response, timestamp FROM chat_history ORDER BY id DESC LIMIT 50")
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify([
+        {"user_message": row[0], "bot_response": row[1], "timestamp": row[2]}
+        for row in rows
+    ])
+
+@app.route("/clear-history", methods=["POST"])
+def clear_history():
+    conn = sqlite3.connect('chat_history.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM chat_history")
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Chat history cleared."})
+
 def duckduckgo_search(query):
     search_url = f"https://html.duckduckgo.com/html/?q={query}"
     headers = {
@@ -212,8 +263,30 @@ def web_search(query):
     formatted_results = [f'<a href="{link}" target="_blank">{link}</a>' for link in search_results]
     return formatted_results
 
+def search_coursera(skill):
+    """
+    Search Coursera for courses related to a specific skill.
+    Returns up to 5 course links.
+    """
+    query = f"{skill.replace(' ', '+')}+course"
+    search_url = f"https://www.coursera.org/search?query={query}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    response = requests.get(search_url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Extract course links
+    course_links = []
+    for link in soup.select("a[href^='/learn']"):
+        course_url = "https://www.coursera.org" + link["href"]
+        course_links.append(course_url)
+        if len(course_links) >= 3:  # Limit to 5 courses per skill
+            break
+
+    return course_links
+
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Running on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
