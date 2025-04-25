@@ -9,3 +9,9 @@ langchain_community
 langchain_openai
 langchain_experimental
 -e . 
+
+PINECONE_API_KEY = os.environ.get('pcsk_35HBfg_JkKU43JUEmTgSy63bj3fNVZ8icm1iFwdzDcu1vUAqRLZeP5C6ysDETy8g5ntEGt')
+GROQ_API_KEY = os.environ.get("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")
+
+os.environ["PINECONE_API_KEY"] = "pcsk_35HBfg_JkKU43JUEmTgSy63bj3fNVZ8icm1iFwdzDcu1vUAqRLZeP5C6ysDETy8g5ntEGt"
+os.environ["GROQ_API_KEY"] = "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"
