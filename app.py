@@ -1,25 +1,19 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session
 from flask_mail import Mail, Message
-from src.helper import download_hugging_face_embeddings
-from langchain_pinecone import PineconeVectorStore
 from langchain_groq import ChatGroq
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
-from src.prompt import *
 import os
 import sqlite3
 from datetime import datetime
 import random
 import requests
-import time
 from bs4 import BeautifulSoup
 import pdfplumber
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")  # Secret key for session encryption
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")
 
 load_dotenv()
 
@@ -33,46 +27,36 @@ app.config.update(
 )
 mail = Mail(app)
 
-# Load API keys
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
+# Load GROQ API key
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
-os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
-# Embedding and model setup
-embeddings = download_hugging_face_embeddings()
-index_name = "edubot"
-docsearch = PineconeVectorStore.from_existing_index(index_name=index_name, embedding=embeddings)
-retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-
+# Use only Groq LLM
 llm = ChatGroq(
     model="gemma2-9b-it",
     temperature=0.7,
     max_tokens=4092,
-    max_retries=2
+    groq_api_key=GROQ_API_KEY
 )
 
+# Prompt template
 system_prompt = """
-You are an assistant for answering career advice questions, providing supportive responses, and handling greetings and gratitude. 
-Use the following pieces of retrieved context to answer the question. 
-If you don't know the answer, say that you don't know. 
-When a user greets you, respond with a friendly greeting. 
-When a user expresses gratitude, respond with a warm and appreciative message. 
-Keep your answers concise, using three sentences maximum.
+You are an assistant for answering career advice questions. 
+If unsure, say you don't know. 
+When a user greets you, respond warmly.
+When a user thanks you, respond appreciatively.
 """
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
-    ("human", "Context: {context}\nQuestion: {input}")
+    ("human", "Question: {input}")
 ])
 
-question_answer_chain = create_stuff_documents_chain(llm, prompt)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+chain = prompt | llm
 
-# Database initialization
+# Database setup
 def init_db():
-    os.makedirs('/app', exist_ok=True)  # Create /app folder if not exists
-    conn = sqlite3.connect('chat_history.db')
+    os.makedirs('/app', exist_ok=True)  # Ensure /app folder exists
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
@@ -98,9 +82,8 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Store chat history with user association
 def store_chat_history(user_id, user_message, bot_response):
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute('''INSERT INTO chat_history (user_id, user_message, bot_response) VALUES (?, ?, ?)''',
                    (user_id, user_message, bot_response))
@@ -125,7 +108,7 @@ def signup():
     data = request.form
     email = data["email"]
     password = data["password"]
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, password))
@@ -140,7 +123,7 @@ def signup():
 def login():
     data = request.form
     email = data["email"]
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
@@ -160,7 +143,7 @@ def verify_otp():
     data = request.form
     email = data["email"]
     otp = data["otp"]
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM otps WHERE email = ? AND otp = ?", (email, otp))
     result = cursor.fetchone()
@@ -189,11 +172,12 @@ def chat():
     if len(msg.split()) < 5 and "career" in msg.lower():
         response = "Could you clarify what you're looking for? For example, are you asking about skills, job roles, or education?"
     else:
-        response = rag_chain.invoke({"input": msg})["answer"]
+        response = chain.invoke({"input": msg}).content
 
     # Optional: Add web search logic here as before
     if user_id:
         store_chat_history(user_id, msg, response)
+
     return response
 
 @app.route("/analyze-skills", methods=["POST"])
@@ -202,11 +186,13 @@ def analyze_skills():
     job_description = request.form.get("job_description", "")
     if not resume_file or not job_description:
         return jsonify({"error": "Resume or job description missing"}), 400
+
     resume_text = ""
     if resume_file.filename.endswith(".pdf"):
         with pdfplumber.open(resume_file) as pdf:
             for page in pdf.pages:
                 resume_text += page.extract_text() or ""
+
     resume_words = set(resume_text.lower().split())
     jd_skills = set(job_description.lower().split(","))
     resume_skills = [skill.strip() for skill in jd_skills if skill.strip() in resume_words]
@@ -215,6 +201,7 @@ def analyze_skills():
     for skill in missing_skills:
         coursera_links = search_coursera(skill)
         course_suggestions[skill] = coursera_links
+
     return jsonify({
         "resume_skills": resume_skills,
         "missing_skills": missing_skills,
@@ -226,11 +213,12 @@ def history():
     user_id = session.get('user_id')  # Only show current user's history
     if not user_id:
         return jsonify([])
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT user_message, bot_response, timestamp FROM chat_history WHERE user_id = ? ORDER BY id DESC LIMIT 50", (user_id,))
     rows = cursor.fetchall()
     conn.close()
+
     return jsonify([
         {"user_message": row[0], "bot_response": row[1], "timestamp": row[2]}
         for row in rows
@@ -238,7 +226,7 @@ def history():
 
 @app.route("/clear-history", methods=["POST"])
 def clear_history():
-    conn = sqlite3.connect('chat_history.db')
+    conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM chat_history")
     conn.commit()
@@ -249,36 +237,17 @@ def clear_history():
 def duckduckgo_search(query):
     search_url = f"https://html.duckduckgo.com/html/?q={query}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "User-Agent": "Mozilla/5.0"
     }
     response = requests.get(search_url, headers=headers)
-    if response.status_code == 202:
-        print("Rate limit hit! Retrying...")
-        time.sleep(10)
-        return duckduckgo_search(query)
     soup = BeautifulSoup(response.text, "html.parser")
-    results = soup.find_all("a", class_="result__a")
-    links = [result["href"] for result in results if "href" in result.attrs]
-    return links
-
-def web_search(query):
-    job_keywords = ["job", "jobs", "career", "employment", "hiring", "recommendation"]
-    job_sites = ["indeed.com", "linkedin.com/jobs", "glassdoor.com", "monster.com", "simplyhired.com"]
-    if any(keyword in query.lower() for keyword in job_keywords):
-        site_filters = " OR ".join([f"site:{site}" for site in job_sites])
-        search_query = f"{query} {site_filters}"
-    else:
-        search_query = query
-    search_results = duckduckgo_search(search_query)
-    formatted_results = [f'<a href="{link}" target="_blank">{link}</a>' for link in search_results]
-    return formatted_results
+    links = [result["href"] for result in soup.find_all("a", class_="result__a", href=True)]
+    return links[:5]
 
 def search_coursera(skill):
     query = f"{skill.replace(' ', '+')}+course"
     search_url = f"https://www.coursera.org/search?query={query}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(search_url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
     course_links = []
