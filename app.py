@@ -5,16 +5,14 @@ from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 import os
 import sqlite3
-from datetime import datetime
 import random
+import pdfplumber
 import requests
 from bs4 import BeautifulSoup
-import pdfplumber
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key")
-
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "fallback-secret-key-for-dev")
 load_dotenv()
 
 # Email configuration
@@ -40,8 +38,8 @@ llm = ChatGroq(
 
 # Prompt template
 system_prompt = """
-You are an assistant for answering career advice questions. 
-If unsure, say you don't know. 
+You are an assistant for answering career advice questions.
+If unsure, say you don't know.
 When a user greets you, respond warmly.
 When a user thanks you, respond appreciatively.
 """
@@ -55,7 +53,7 @@ chain = prompt | llm
 
 # Database setup
 def init_db():
-    os.makedirs('/app', exist_ok=True)  # Ensure /app folder exists
+    os.makedirs('/app', exist_ok=True)
     conn = sqlite3.connect('/app/chat_history.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -151,7 +149,7 @@ def verify_otp():
         cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
         user = cursor.fetchone()
         if user:
-            session['user_id'] = user[0]  # Store user ID in session
+            session['user_id'] = user[0]
         return redirect(url_for('chatbot'))
     else:
         return jsonify({"message": "Invalid OTP."}), 400
@@ -174,7 +172,6 @@ def chat():
     else:
         response = chain.invoke({"input": msg}).content
 
-    # Optional: Add web search logic here as before
     if user_id:
         store_chat_history(user_id, msg, response)
 
@@ -210,7 +207,7 @@ def analyze_skills():
 
 @app.route("/history")
 def history():
-    user_id = session.get('user_id')  # Only show current user's history
+    user_id = session.get('user_id')
     if not user_id:
         return jsonify([])
     conn = sqlite3.connect('/app/chat_history.db')
@@ -236,9 +233,7 @@ def clear_history():
 # Web search functions
 def duckduckgo_search(query):
     search_url = f"https://html.duckduckgo.com/html/?q={query}"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(search_url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
     links = [result["href"] for result in soup.find_all("a", class_="result__a", href=True)]
