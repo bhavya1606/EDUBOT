@@ -7,8 +7,8 @@ import os
 import sqlite3
 import random
 import pdfplumber
-import requests
 from bs4 import BeautifulSoup
+import requests
 
 # Initialize Flask app
 app = Flask(__name__)
