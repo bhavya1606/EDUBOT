@@ -72,7 +72,7 @@ rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 # Database initialization
 def init_db():
     os.makedirs('/app', exist_ok=True)  # Create /app folder if not exists
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS chat_history (
@@ -100,7 +100,7 @@ def init_db():
 
 # Store chat history with user association
 def store_chat_history(user_id, user_message, bot_response):
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute('''INSERT INTO chat_history (user_id, user_message, bot_response) VALUES (?, ?, ?)''',
                    (user_id, user_message, bot_response))
@@ -125,7 +125,7 @@ def signup():
     data = request.form
     email = data["email"]
     password = data["password"]
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, password))
@@ -140,7 +140,7 @@ def signup():
 def login():
     data = request.form
     email = data["email"]
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     user = cursor.fetchone()
@@ -160,7 +160,7 @@ def verify_otp():
     data = request.form
     email = data["email"]
     otp = data["otp"]
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM otps WHERE email = ? AND otp = ?", (email, otp))
     result = cursor.fetchone()
@@ -226,7 +226,7 @@ def history():
     user_id = session.get('user_id')  # Only show current user's history
     if not user_id:
         return jsonify([])
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute("SELECT user_message, bot_response, timestamp FROM chat_history WHERE user_id = ? ORDER BY id DESC LIMIT 50", (user_id,))
     rows = cursor.fetchall()
@@ -238,7 +238,7 @@ def history():
 
 @app.route("/clear-history", methods=["POST"])
 def clear_history():
-    conn = sqlite3.connect('/app/chat_history.db')
+    conn = sqlite3.connect('chat_history.db')
     cursor = conn.cursor()
     cursor.execute("DELETE FROM chat_history")
     conn.commit()
