@@ -1,0 +1,10 @@
+cd path/to/your/project
+sqlite3 chat_history.db
+.tables
+PRAGMA table_info(users);
+PRAGMA table_info(chat_history);
+PRAGMA table_info(otps);
+SELECT * FROM users;
+SELECT * FROM chat_history;
+SELECT * FROM otps;
+.exit
