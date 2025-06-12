@@ -6,9 +6,6 @@ from langchain_groq import ChatGroq
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.embeddings import HuggingFaceEmbeddings
-# from langchain_core.chains import create_retrieval_chain
-# from langchain_core.chains import create_stuff_documents_chain
 from dotenv import load_dotenv
 from src.prompt import *
 import os
